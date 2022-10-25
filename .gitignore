@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/tinyraycaster
+tinyraycaster.so
+tinyraycaster.dylib
+tinyraycaster.dll
+tinyraycaster.a
+tinyraycaster.lib
+tinyraycaster-test-*
+*.exe
+*.o
+*.obj
+*.lst
