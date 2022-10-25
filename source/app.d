@@ -85,12 +85,33 @@ void main()
 
     // Overlay with player's position
     import std.conv : to;
+    import std.math : cos, sin;
 
     float playerX = 3.456;
     float playerY = 2.345;
+    float playerViewDirection = 1.523; // Angle from global x-axis in radians
+
     drawRectangle(frameBuffer, windowWidth, windowWidth, (playerX * rectangleWidth)
             .to!size_t, (playerY * rectangleHeight).to!size_t, 5, 5, packColour(255, 255, 255));
 
-	// Save framebuffer to image file
+    // Cast a ray from the player
+    float c = 0.0;
+    for (; c < 20; c += 0.05)
+    {
+        // Get points on map
+        float cx = playerX + c * cos(playerViewDirection);
+        float cy = playerY + c * sin(playerViewDirection);
+
+        // If no hit, keep searching
+        if (map[cy.to!size_t][cx.to!size_t] != ' ')
+            break; // Hit found
+
+        // Draw line if keeping on searching
+        size_t lineX = (cx * rectangleWidth).to!size_t;
+        size_t lineY = (cy * rectangleHeight).to!size_t;
+        frameBuffer[lineX + lineY * windowWidth] = packColour(255, 255, 255);
+    }
+
+    // Save framebuffer to image file
     writeP6Image("out.ppm", frameBuffer, windowWidth, windowHeight);
 }
