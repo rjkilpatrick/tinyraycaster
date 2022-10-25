@@ -83,5 +83,14 @@ void main()
         }
     }
 
+    // Overlay with player's position
+    import std.conv : to;
+
+    float playerX = 3.456;
+    float playerY = 2.345;
+    drawRectangle(frameBuffer, windowWidth, windowWidth, (playerX * rectangleWidth)
+            .to!size_t, (playerY * rectangleHeight).to!size_t, 5, 5, packColour(255, 255, 255));
+
+	// Save framebuffer to image file
     writeP6Image("out.ppm", frameBuffer, windowWidth, windowHeight);
 }
