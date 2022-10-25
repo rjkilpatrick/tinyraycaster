@@ -4,7 +4,8 @@ import std.file;
 import std.conv : to;
 import std.stdio;
 
-uint packColour(const ubyte r, const ubyte g, ubyte b, ubyte a = 255u) {
+uint packColour(const ubyte r, const ubyte g, ubyte b, ubyte a = 255u)
+{
     return (a << 24) + (b << 16) + (g << 8) + r;
 }
 
@@ -17,7 +18,8 @@ uint packColour(const ubyte r, const ubyte g, ubyte b, ubyte a = 255u) {
  +   b = (returns) blue value of colour
  +   a = (returns) alpha value of colour
  +/
-void unpackColour(const uint colour, ref ubyte r, ref ubyte g, ref ubyte b, ref ubyte a) {
+void unpackColour(const uint colour, ref ubyte r, ref ubyte g, ref ubyte b, ref ubyte a)
+{
     r = (colour >>> 0) & 0xff;
     g = (colour >>> 8) & 0xff;
     b = (colour >>> 16) & 0xff;
@@ -32,13 +34,15 @@ void unpackColour(const uint colour, ref ubyte r, ref ubyte g, ref ubyte b, ref 
  +   width = width of the image (needed to un-linearize the array)
  +   height = height of the image (needed to un-linearize the array)
  +/
-void writeP6Image(const string filename, const uint[] image, const int width, const int height) {
+void writeP6Image(const string filename, const uint[] image, const int width, const int height)
+{
     auto f = File(filename, "w+");
     scope (exit)
         f.close();
     f.write("P6\n" ~ width.to!string ~ " " ~ height.to!string ~ "\n255\n");
 
-    foreach (uint pixel; image) {
+    foreach (uint pixel; image)
+    {
         ubyte r, g, b, a;
         unpackColour(pixel, r, g, b, a);
         f.rawWrite([r, g, b]); // TODO: Surely there's a better way of doing this...
@@ -53,13 +57,15 @@ void writeP6Image(const string filename, const uint[] image, const int width, co
  +   width = width of the image (needed to un-linearize the array)
  +   height = height of the image (needed to un-linearize the array)
  +/
-void writeP3Image(const string filename, const uint[] image, const int width, const int height) {
+void writeP3Image(const string filename, const uint[] image, const int width, const int height)
+{
     auto f = File(filename, "w+");
     scope (exit)
         f.close();
     f.write("P3\n" ~ width.to!string ~ " " ~ height.to!string ~ "\n255\n\n");
 
-    foreach (uint pixel; image) {
+    foreach (uint pixel; image)
+    {
         ubyte r, g, b, a;
         unpackColour(pixel, r, g, b, a);
         f.write(r, " ", g, " ", b, "\n");
