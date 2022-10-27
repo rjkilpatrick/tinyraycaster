@@ -11,7 +11,8 @@ void drawRectangle(ref uint[] image, const size_t imageWidth, const size_t image
         {
             size_t cx = x + i;
             size_t cy = y + j;
-            assert(cx < imageWidth && cy < imageHeight);
+            if (cx >= imageWidth || cy >= imageHeight)
+                continue;
             image[cx + cy * imageWidth] = colour;
         }
     }
@@ -19,25 +20,12 @@ void drawRectangle(ref uint[] image, const size_t imageWidth, const size_t image
 
 void main()
 {
-    import std.conv : to;
-
-    const size_t windowWidth = 512; // Image Width
+    // Create frame buffer
+    const size_t windowWidth = 1024; // Image Width
     const size_t windowHeight = 512; // Image Height
 
     uint[] frameBuffer = new uint[](windowHeight * windowWidth);
-    frameBuffer[] = 0xffu; // Initialize to red
-
-    // Create colour gradients
-    foreach (size_t j; 0 .. windowHeight)
-    {
-        foreach (size_t i; 0 .. windowWidth)
-        {
-            ubyte r = (255u * j / float(windowHeight)).to!ubyte;
-            ubyte g = (255u * i / float(windowWidth)).to!ubyte;
-            ubyte b = 0u;
-            frameBuffer[i + j * windowWidth] = packColour(r, g, b);
-        }
-    }
+    frameBuffer[] = packColour(255, 255, 255); // Initialize to white
 
     // Overlay game map
     const size_t mapWidth = 16; // map width
@@ -66,50 +54,69 @@ void main()
     assert(map.length == mapHeight);
     assert(map[0].length == mapWidth);
 
-    // TODO: Add some graceful handling
+    // TODO: Add some graceful exception handling
 
-    const size_t rectangleWidth = windowWidth / mapWidth;
-    const size_t rectangleHeight = windowWidth / mapHeight;
-    foreach (size_t j; 0 .. mapHeight)
-    {
-        foreach (size_t i; 0 .. mapWidth)
-        {
+    const size_t rectangleWidth = windowWidth / (mapWidth * 2); // Only first half for map rendering
+    const size_t rectangleHeight = windowHeight / mapHeight;
+
+    foreach (size_t j; 0 .. mapHeight) {
+        foreach (size_t i; 0 .. mapWidth) {
             if (map[j][i] == ' ')
                 continue; // i.e., skip empty
             size_t rectangleX = i * rectangleWidth;
             size_t rectangleY = j * rectangleHeight;
             drawRectangle(frameBuffer, windowWidth, windowHeight, rectangleX,
-                    rectangleY, rectangleWidth, rectangleHeight, packColour(0, 255, 255));
+                rectangleY, rectangleWidth, rectangleHeight, packColour(0, 255, 255));
         }
     }
 
+    // Get colours for walls
+    import std.random : uniform;
+
+    const size_t numColours = 10;
+    uint[numColours] colours;
+    foreach (ref colour; colours) {
+        colour = packColour(uniform(cast(ubyte) 0, cast(ubyte) 255),
+            uniform(cast(ubyte) 0, cast(ubyte) 255), uniform(cast(ubyte) 0, cast(ubyte) 255));
+    }
+
     // Overlay with player's position
-    import std.conv : to;
+    import std.conv : to, roundTo;
     import std.math : cos, sin;
+    import std.math.constants : PI;
 
     float playerX = 3.456;
     float playerY = 2.345;
     float playerViewDirection = 1.523; // Angle from global x-axis in radians
-
-    drawRectangle(frameBuffer, windowWidth, windowWidth, (playerX * rectangleWidth)
-            .to!size_t, (playerY * rectangleHeight).to!size_t, 5, 5, packColour(255, 255, 255));
+    const float playerFov = 0.333 * PI; // Horizontal FOV in radians
 
     // Cast a ray from the player
-    float c = 0.0;
-    for (; c < 20; c += 0.05)
-    {
-        // Get points on map
-        float cx = playerX + c * cos(playerViewDirection);
-        float cy = playerY + c * sin(playerViewDirection);
+    foreach (size_t i; 0 .. windowWidth / 2) { // Remember we're only using half of the window width now
+        float angle = playerViewDirection - (playerFov / 2) + playerFov * i / float(windowWidth / 2);
 
-        // If no hit, keep searching
-        if (map[cy.to!size_t][cx.to!size_t] != ' ')
-            break; // Hit found
+        for (float c = 0.0; c < 20; c += 0.01) {
+            // Get points on map
+            float cx = playerX + c * cos(angle);
+            float cy = playerY + c * sin(angle);
 
-        // Draw line if keeping on searching
-        size_t lineX = (cx * rectangleWidth).to!size_t;
-        size_t lineY = (cy * rectangleHeight).to!size_t;
-        frameBuffer[lineX + lineY * windowWidth] = packColour(255, 255, 255);
+            // Draw line if keeping on searching
+            size_t lineX = (cx * rectangleWidth).roundTo!int;
+            size_t lineY = (cy * rectangleHeight).roundTo!int;
+            frameBuffer[lineX + lineY * windowWidth] = packColour(160, 160, 160);
+
+            // If we've hit a wall, then draw it in that specific line
+            if (map[cy.to!size_t][cx.to!size_t] != ' ') {
+                size_t columnHeight = (windowHeight / (c * cos(angle - playerViewDirection)))
+                    .to!size_t;
+                size_t colourIdx = map[cy.to!size_t][cx.to!size_t] - '0'; // Color idx
+                assert(colourIdx < colours.length);
+                uint colour = colours[colourIdx];
+                drawRectangle(frameBuffer, windowWidth, windowHeight, windowWidth / 2 + i,
+                    windowHeight / 2 - columnHeight / 2, 1, columnHeight, colour);
+                break;
+            }
+
+        }
     }
 
     // Save framebuffer to image file
