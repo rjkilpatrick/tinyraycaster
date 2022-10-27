@@ -3,6 +3,9 @@
 		"rjkilpatrick"
 	],
 	"copyright": "Copyright © 2022, rjkilpatrick",
+	"dependencies": {
+		"gamut": "~>1.0.0"
+	},
 	"description": "A quick raycaster in D",
 	"license": "MIT",
 	"name": "tinyraycaster"
