@@ -88,6 +88,15 @@ int main()
     uint[] frameBuffer = new uint[](windowHeight * windowWidth);
     frameBuffer[] = packColour(255, 255, 255); // Initialize to white
 
+    // Get texture
+    uint[] textureBuffer = new uint[](0);
+    size_t textureSize, textureCount;
+    if (!loadTextureAtlas("./source/walltext.png", textureBuffer, textureSize, textureCount))
+    {
+        stderr.writeln("Could not load textures of walls");
+        return -1;
+    }
+
     // Overlay game map
     const size_t mapWidth = 16; // map width
     const size_t mapHeight = 16; // map height
@@ -100,9 +109,9 @@ int main()
 		"0     0  1110000",
 		"0     3        0",
         "0   10000      0",
-		"0   0   11100  0",
-		"0   0   0      0",
-        "0   0   1  00000",
+		"0   3   11100  0",
+		"5   4   0      0",
+        "5   4   1  00000",
 		"0       1      0",
 		"2       1      0",
         "0       0      0",
@@ -128,20 +137,12 @@ int main()
                 continue; // i.e., skip empty
             size_t rectangleX = i * rectangleWidth;
             size_t rectangleY = j * rectangleHeight;
+            size_t textureIdx = map[j][i] - '0'; // Texture idx
+            assert(textureIdx < textureCount);
+            uint colour = textureBuffer[textureIdx * textureSize]; // Take colour from upper left pixel of textureId from texture
             drawRectangle(frameBuffer, windowWidth, windowHeight, rectangleX,
-                    rectangleY, rectangleWidth, rectangleHeight, packColour(0, 255, 255));
+                    rectangleY, rectangleWidth, rectangleHeight, colour);
         }
-    }
-
-    // Get colours for walls
-    import std.random : uniform;
-
-    const size_t numColours = 10;
-    uint[numColours] colours;
-    foreach (ref colour; colours)
-    {
-        colour = packColour(uniform(cast(ubyte) 0, cast(ubyte) 255),
-                uniform(cast(ubyte) 0, cast(ubyte) 255), uniform(cast(ubyte) 0, cast(ubyte) 255));
     }
 
     // Overlay with player's position
@@ -175,35 +176,14 @@ int main()
             {
                 size_t columnHeight = (windowHeight / (c * cos(angle - playerViewDirection)))
                     .to!size_t;
-                size_t colourIdx = map[cy.to!size_t][cx.to!size_t] - '0'; // Color idx
-                assert(colourIdx < colours.length);
-                uint colour = colours[colourIdx];
+                size_t textureIdx = map[cy.to!size_t][cx.to!size_t] - '0'; // Texture idx
+                assert(textureIdx < textureCount);
+                uint colour = textureBuffer[textureIdx * textureSize]; // Take colour from upper left pixel of textureId from texture
                 drawRectangle(frameBuffer, windowWidth, windowHeight, windowWidth / 2 + i,
                         windowHeight / 2 - columnHeight / 2, 1, columnHeight, colour);
                 break;
             }
 
-        }
-    }
-
-    // Get texture
-    uint[] textureBuffer = new uint[](0);
-    size_t textureSize, textureCount;
-    if (!loadTextureAtlas("./source/walltext.png", textureBuffer, textureSize, textureCount))
-    {
-        stderr.writeln("Could not load textures of walls");
-        return -1;
-    }
-
-    // Overwrite texture
-    const size_t textureId = 4;
-    assert(textureId <= textureCount);
-    foreach (i; 0 .. textureSize)
-    {
-        foreach (j; 0 .. textureSize)
-        {
-            frameBuffer[windowWidth * j + i] = textureBuffer[textureSize * (
-                        textureId + j * textureCount) + i];
         }
     }
 
