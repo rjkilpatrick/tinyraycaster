@@ -79,6 +79,23 @@ bool loadTextureAtlas(const string filename, ref uint[] texture,
     return true;
 }
 
+uint[] textureColumn(ref uint[] image, const size_t textureSize, const size_t numTextures,
+        const size_t textureId, const size_t textureCoordinate, const size_t columnHeight)
+{
+    const size_t imageWidth = textureSize * numTextures;
+    const size_t imageHeight = textureSize;
+    assert(image.length == imageWidth * imageHeight
+            && textureCoordinate < textureSize && textureId < numTextures);
+    uint[] column = new uint[](columnHeight);
+    foreach (size_t y; 0 .. columnHeight)
+    {
+        size_t pixelX = textureId * textureSize + textureCoordinate;
+        size_t pixelY = (y * textureSize) / columnHeight;
+        column[y] = image[pixelX + pixelY * imageWidth];
+    }
+    return column;
+}
+
 int main()
 {
     // Create frame buffer
@@ -147,7 +164,7 @@ int main()
 
     // Overlay with player's position
     import std.conv : to, roundTo;
-    import std.math : cos, sin;
+    import std.math : cos, sin, floor, abs;
     import std.math.constants : PI;
 
     float playerX = 3.456;
@@ -167,9 +184,9 @@ int main()
             float cy = playerY + c * sin(angle);
 
             // Draw line if keeping on searching
-            size_t lineX = (cx * rectangleWidth).roundTo!int;
-            size_t lineY = (cy * rectangleHeight).roundTo!int;
-            frameBuffer[lineX + lineY * windowWidth] = packColour(160, 160, 160);
+            size_t pixelX = (cx * rectangleWidth).roundTo!int;
+            size_t pixelY = (cy * rectangleHeight).roundTo!int;
+            frameBuffer[pixelX + pixelY * windowWidth] = packColour(160, 160, 160);
 
             // If we've hit a wall, then draw it in that specific line
             if (map[cy.to!size_t][cx.to!size_t] != ' ')
@@ -178,9 +195,28 @@ int main()
                     .to!size_t;
                 size_t textureIdx = map[cy.to!size_t][cx.to!size_t] - '0'; // Texture idx
                 assert(textureIdx < textureCount);
-                uint colour = textureBuffer[textureIdx * textureSize]; // Take colour from upper left pixel of textureId from texture
-                drawRectangle(frameBuffer, windowWidth, windowHeight, windowWidth / 2 + i,
-                        windowHeight / 2 - columnHeight / 2, 1, columnHeight, colour);
+
+                float hitX = cx - (cx + 0.5).floor;
+                float hitY = cy - (cy + 0.5).floor;
+                int textureX = (hitX * textureSize).to!int;
+                if (hitY.abs > hitX.abs)
+                {
+                    textureX = (hitY * textureSize).to!int;
+                }
+                if (textureX < 0)
+                    textureX += textureSize; // Allow for python style negative indexing
+                assert(textureX >= 0 && textureX < cast(int) textureSize);
+
+                uint[] column = textureColumn(textureBuffer, textureSize,
+                        textureCount, textureIdx, textureX, columnHeight);
+                pixelX = windowWidth / 2 + i;
+                foreach (size_t j; 0 .. columnHeight)
+                {
+                    pixelY = j + windowHeight / 2 - columnHeight / 2;
+                    if (pixelY < 0 || pixelY > cast(int) windowHeight)
+                        continue;
+                    frameBuffer[pixelY * windowWidth + pixelX] = column[j];
+                }
                 break;
             }
 
