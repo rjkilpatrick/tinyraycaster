@@ -2,228 +2,125 @@ import std.stdio;
 
 import tinyraycaster;
 
-void drawRectangle(ref uint[] image, const size_t imageWidth, const size_t imageHeight,
-        const size_t x, const size_t y, const size_t width, const size_t height, const uint colour)
+int wall_x_texcoord(const float x, const float y, ref Texture tex_walls)
 {
-    foreach (size_t i; 0 .. width)
+    import std.math : abs, floor;
+    import std.conv : to;
+
+    float hitX = x - (x + 0.5).floor;
+    float hitY = y - (y + 0.5).floor;
+    int textureX = (hitX * tex_walls.size).to!int;
+    if (hitY.abs > hitX.abs)
     {
-        foreach (size_t j; 0 .. height)
+        textureX = (hitY * tex_walls.size).to!int;
+    }
+    if (textureX < 0)
+        textureX += tex_walls.size; // Allow for python style negative indexing
+    assert(textureX >= 0 && textureX < cast(int) tex_walls.size);
+
+    return textureX;
+}
+
+void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player, ref Texture wallTexture)
+{
+    frameBuffer.clear(white);
+
+    const size_t rectangleWidth = frameBuffer.width / (map.width * 2);
+    const size_t rectangleHeight = frameBuffer.height / map.height;
+
+    // Draw map on left-hand side of the screen
+    foreach (size_t j; 0 .. map.height)
+    {
+        foreach (size_t i; 0 .. map.width)
         {
-            size_t cx = x + i;
-            size_t cy = y + j;
-            if (cx >= imageWidth || cy >= imageHeight)
+            if (map.isEmpty(i, j))
                 continue;
-            image[cx + cy * imageWidth] = colour;
+
+            const size_t rectangleX = i * rectangleWidth;
+            const size_t rectangleY = j * rectangleHeight;
+            const size_t textureId = map.get(i, j);
+
+            assert(textureId < wallTexture.count);
+            const colour = wallTexture.get(0, 0, textureId);
+
+            frameBuffer.drawRectangle(rectangleX, rectangleY, rectangleWidth,
+                    rectangleHeight, colour);
         }
     }
-}
 
-/++ 
- + Loads horizontally-packed square-texture atlas
- + Params:
- +   filename = path to texture file
- +   texture = uint packed texture
- +   textureSize = Height of individual textures
- +   textureCount = Number of textures in total, horizontally
- + Returns: 
- +/
-bool loadTextureAtlas(const string filename, ref uint[] texture,
-        ref size_t textureSize, ref size_t textureCount)
-{
-    import gamut;
+    // Draw visility cone and raycasted view
+    import std.math : cos, sin;
+    import std.conv : to;
 
-    Image image;
-    image.loadFromFile(filename);
-    if (image.errored)
+    foreach (size_t i; 0 .. frameBuffer.width / 2)
     {
-        import std.conv : to;
-
-        stderr.writeln(image.errorMessage.to!string);
-        return false;
-    }
-
-    if (image.type != PixelType.rgba8)
-    {
-        stderr.writeln("Error: Texture file must be a rgba8 file");
-        return false;
-    }
-
-    if (!image.hasData)
-    {
-        stderr.writeln("Error: Texture file has no data");
-        return false;
-    }
-
-    textureCount = image.width / image.height;
-    textureSize = image.width / textureCount;
-
-    texture.length = image.height * image.width;
-
-    if (image.width != image.height * textureCount)
-    {
-        stderr.writeln("Error: Texture file must contain N square textures packed horizontally");
-    }
-
-    for (int y = 0; y < image.height(); y++)
-    {
-        ubyte* scanline = image.scanline(y);
-        for (int x = 0; x < image.width(); x++)
+        float angle = player.viewDirection - player.fov / 2 + player.fov * (
+                2.0 * i / frameBuffer.width);
+        for (float t = 0.; t < 20; t += 0.01)
         {
-            ubyte r = scanline[4 * x + 0];
-            ubyte g = scanline[4 * x + 1];
-            ubyte b = scanline[4 * x + 2];
-            ubyte a = scanline[4 * x + 3];
-            texture[y * image.width + x] = packColour(r, g, b, a);
+            float x = player.x + t * cos(angle);
+            float y = player.y + t * sin(angle);
+
+            // Draw visibility cone
+            frameBuffer.setPixel((x * rectangleWidth).to!size_t,
+                    (y * rectangleHeight).to!size_t, packColour(160, 160, 160));
+
+            if (map.isEmpty(x.to!size_t, y.to!size_t))
+                continue;
+
+            size_t textureId = map.get(x.to!size_t, y.to!size_t); // our ray touches a wall, so draw the vertical column to create an illusion of 3D
+            assert(textureId < wallTexture.count);
+
+            size_t columnHeight = (frameBuffer.height / (t * cos(angle - player.viewDirection)))
+                .to!size_t;
+            int x_texcoord = wall_x_texcoord(x, y, wallTexture);
+            uint[] column = wallTexture.getScaledColumn(textureId, x_texcoord, columnHeight);
+
+            // we are drawing at the right half of the screen, thus +frameBuffer.w/2
+            auto pix_x = i + frameBuffer.width / 2;
+
+            // Copy texture column to framebuffer
+            for (size_t j = 0; j < columnHeight; j++)
+            {
+                auto pix_y = j + frameBuffer.height / 2 - columnHeight / 2;
+                if (pix_y >= 0 && pix_y < frameBuffer.height)
+                {
+                    frameBuffer.setPixel(pix_x, pix_y, column[j]);
+                }
+            }
+            break;
         }
     }
-    return true;
-}
-
-uint[] textureColumn(ref uint[] image, const size_t textureSize, const size_t numTextures,
-        const size_t textureId, const size_t textureCoordinate, const size_t columnHeight)
-{
-    const size_t imageWidth = textureSize * numTextures;
-    const size_t imageHeight = textureSize;
-    assert(image.length == imageWidth * imageHeight
-            && textureCoordinate < textureSize && textureId < numTextures);
-    uint[] column = new uint[](columnHeight);
-    foreach (size_t y; 0 .. columnHeight)
-    {
-        size_t pixelX = textureId * textureSize + textureCoordinate;
-        size_t pixelY = (y * textureSize) / columnHeight;
-        column[y] = image[pixelX + pixelY * imageWidth];
-    }
-    return column;
 }
 
 int main()
 {
+    import std.math : PI;
+    import std.conv : to;
+
     // Create frame buffer
-    const size_t windowWidth = 1024; // Image Width
-    const size_t windowHeight = 512; // Image Height
+    const windowWidth = 1024;
+    const windowHeight = 512;
+    FrameBuffer frameBuffer = FrameBuffer(windowWidth, windowHeight,
+            new uint[](windowWidth * windowHeight));
 
-    uint[] frameBuffer = new uint[](windowHeight * windowWidth);
-    frameBuffer[] = packColour(255, 255, 255); // Initialize to white
-
-    // Get texture
-    uint[] textureBuffer = new uint[](0);
-    size_t textureSize, textureCount;
-    if (!loadTextureAtlas("./source/walltext.png", textureBuffer, textureSize, textureCount))
+    Player player = Player(3.456, 2.345, 1.523, PI / 3);
+    Map map;
+    Texture wallTexture = Texture("./source/walltext.png");
+    if (!wallTexture.count)
     {
         stderr.writeln("Could not load textures of walls");
         return -1;
     }
 
-    // Overlay game map
-    const size_t mapWidth = 16; // map width
-    const size_t mapHeight = 16; // map height
-    const string[] map = [
-        // dfmt off
-        "0000222222220000",
-		"1              0",
-		"1      11111   0",
-        "1     0        0",
-		"0     0  1110000",
-		"0     3        0",
-        "0   10000      0",
-		"0   3   11100  0",
-		"5   4   0      0",
-        "5   4   1  00000",
-		"0       1      0",
-		"2       1      0",
-        "0       0      0",
-		"0 0000000      0",
-		"0              0",
-        "0002222222200000",
-		// dfmt on
-    ];
-
-    assert(map.length == mapHeight);
-    assert(map[0].length == mapWidth);
-
-    // TODO: Add some graceful exception handling
-
-    const size_t rectangleWidth = windowWidth / (mapWidth * 2); // Only first half for map rendering
-    const size_t rectangleHeight = windowHeight / mapHeight;
-
-    foreach (size_t j; 0 .. mapHeight)
+    int frameCount = 50;
+    foreach (size_t frame; 0 .. frameCount)
     {
-        foreach (size_t i; 0 .. mapWidth)
-        {
-            if (map[j][i] == ' ')
-                continue; // i.e., skip empty
-            size_t rectangleX = i * rectangleWidth;
-            size_t rectangleY = j * rectangleHeight;
-            size_t textureIdx = map[j][i] - '0'; // Texture idx
-            assert(textureIdx < textureCount);
-            uint colour = textureBuffer[textureIdx * textureSize]; // Take colour from upper left pixel of textureId from texture
-            drawRectangle(frameBuffer, windowWidth, windowHeight, rectangleX,
-                    rectangleY, rectangleWidth, rectangleHeight, colour);
-        }
+        render(frameBuffer, map, player, wallTexture);
+        // Save frame buffer to image file
+        writeP6Image("out" ~ frame.to!string ~ ".ppm", frameBuffer.image, windowWidth, windowHeight);
+        player.viewDirection += 2.0 * PI / frameCount;
     }
 
-    // Overlay with player's position
-    import std.conv : to, roundTo;
-    import std.math : cos, sin, floor, abs;
-    import std.math.constants : PI;
-
-    float playerX = 3.456;
-    float playerY = 2.345;
-    float playerViewDirection = 1.523; // Angle from global x-axis in radians
-    const float playerFov = 0.333 * PI; // Horizontal FOV in radians
-
-    // Cast a ray from the player
-    foreach (size_t i; 0 .. windowWidth / 2)
-    { // Remember we're only using half of the window width now
-        float angle = playerViewDirection - (playerFov / 2) + playerFov * i / float(windowWidth / 2);
-
-        for (float c = 0.0; c < 20; c += 0.01)
-        {
-            // Get points on map
-            float cx = playerX + c * cos(angle);
-            float cy = playerY + c * sin(angle);
-
-            // Draw line if keeping on searching
-            size_t pixelX = (cx * rectangleWidth).roundTo!int;
-            size_t pixelY = (cy * rectangleHeight).roundTo!int;
-            frameBuffer[pixelX + pixelY * windowWidth] = packColour(160, 160, 160);
-
-            // If we've hit a wall, then draw it in that specific line
-            if (map[cy.to!size_t][cx.to!size_t] != ' ')
-            {
-                size_t columnHeight = (windowHeight / (c * cos(angle - playerViewDirection)))
-                    .to!size_t;
-                size_t textureIdx = map[cy.to!size_t][cx.to!size_t] - '0'; // Texture idx
-                assert(textureIdx < textureCount);
-
-                float hitX = cx - (cx + 0.5).floor;
-                float hitY = cy - (cy + 0.5).floor;
-                int textureX = (hitX * textureSize).to!int;
-                if (hitY.abs > hitX.abs)
-                {
-                    textureX = (hitY * textureSize).to!int;
-                }
-                if (textureX < 0)
-                    textureX += textureSize; // Allow for python style negative indexing
-                assert(textureX >= 0 && textureX < cast(int) textureSize);
-
-                uint[] column = textureColumn(textureBuffer, textureSize,
-                        textureCount, textureIdx, textureX, columnHeight);
-                pixelX = windowWidth / 2 + i;
-                foreach (size_t j; 0 .. columnHeight)
-                {
-                    pixelY = j + windowHeight / 2 - columnHeight / 2;
-                    if (pixelY < 0 || pixelY > cast(int) windowHeight)
-                        continue;
-                    frameBuffer[pixelY * windowWidth + pixelX] = column[j];
-                }
-                break;
-            }
-
-        }
-    }
-
-    // Save framebuffer to image file
-    writeP6Image("out.ppm", frameBuffer, windowWidth, windowHeight);
     return 0;
 }

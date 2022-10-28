@@ -1,8 +1,16 @@
 module tinyraycaster.colour;
 
-import std.file;
-import std.conv : to;
 import std.stdio;
+
+static uint white()
+{
+    return packColour(255, 255, 255);
+}
+
+static uint black()
+{
+    return packColour(0, 0, 0);
+}
 
 uint packColour(const ubyte r, const ubyte g, ubyte b, ubyte a = 255u)
 {
@@ -36,6 +44,9 @@ void unpackColour(const uint colour, ref ubyte r, ref ubyte g, ref ubyte b, ref 
  +/
 void writeP6Image(const string filename, const uint[] image, const int width, const int height)
 {
+    import std.file;
+    import std.conv : to;
+
     auto f = File(filename, "w+");
     scope (exit)
         f.close();
@@ -59,6 +70,9 @@ void writeP6Image(const string filename, const uint[] image, const int width, co
  +/
 void writeP3Image(const string filename, const uint[] image, const int width, const int height)
 {
+    import std.file;
+    import std.conv : to;
+
     auto f = File(filename, "w+");
     scope (exit)
         f.close();
