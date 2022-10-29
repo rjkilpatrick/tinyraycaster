@@ -31,8 +31,8 @@ void mapShowSprite(ref Sprite sprite, ref FrameBuffer frameBuffer, ref Map map)
             (sprite.y * rectangleHeight - 3).to!size_t, 6, 6, packColour(255, 0, 0));
 }
 
-void drawSprite(ref Sprite sprite, ref FrameBuffer frameBuffer, ref Player player,
-        ref Texture spriteTexture)
+void drawSprite(ref Sprite sprite, ref float[] depthBuffer,
+        ref FrameBuffer frameBuffer, ref Player player, ref Texture spriteTexture)
 {
     import std.math : atan2, sqrt;
     import std.algorithm.comparison : min;
@@ -52,11 +52,18 @@ void drawSprite(ref Sprite sprite, ref FrameBuffer frameBuffer, ref Player playe
     {
         if ((offsetH + i) < 0 || (offsetH + i) >= frameBuffer.width / 2)
             continue;
+        if (depthBuffer[offsetH + i] < spriteDistance)
+            continue;
         foreach (size_t j; 0 .. spriteScreenSize)
         {
             if ((offsetV + j) < 0 || (offsetV + j) >= frameBuffer.height)
                 continue;
-            frameBuffer.setPixel(frameBuffer.width / 2 + offsetH + i, offsetV + j, black);
+            uint colour = spriteTexture.get(i * spriteTexture.size / spriteScreenSize,
+                    j * spriteTexture.size / spriteScreenSize, sprite.textureId);
+            ubyte r, g, b, a;
+            unpackColour(colour, r, g, b, a);
+            if (a > 128)
+                frameBuffer.setPixel(frameBuffer.width / 2 + offsetH + i, offsetV + j, colour);
         }
     }
 }
@@ -89,6 +96,10 @@ void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player,
         }
     }
 
+    // Set up depth buffer
+    float[] depthBuffer = new float[](frameBuffer.width / 2);
+    depthBuffer[] = float.infinity;
+
     // Draw visility cone and raycasted view
     import std.math : cos, sin;
     import std.conv : to;
@@ -112,8 +123,10 @@ void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player,
             size_t textureId = map.get(x.to!size_t, y.to!size_t); // our ray touches a wall, so draw the vertical column to create an illusion of 3D
             assert(textureId < wallTexture.count);
 
-            size_t columnHeight = (frameBuffer.height / (t * cos(angle - player.viewDirection)))
-                .to!size_t;
+            float distance = (t * cos(angle - player.viewDirection));
+            depthBuffer[i] = distance;
+
+            size_t columnHeight = (frameBuffer.height / distance).to!size_t;
             int x_texcoord = wall_x_texcoord(x, y, wallTexture);
             uint[] column = wallTexture.getScaledColumn(textureId, x_texcoord, columnHeight);
 
@@ -136,7 +149,7 @@ void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player,
     foreach (sprite; sprites)
     {
         mapShowSprite(sprite, frameBuffer, map);
-        drawSprite(sprite, frameBuffer, player, monsterTexture);
+        drawSprite(sprite, depthBuffer, frameBuffer, player, monsterTexture);
     }
 }
 

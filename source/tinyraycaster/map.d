@@ -2,16 +2,6 @@ module tinyraycaster.map;
 
 struct Map
 {
-    // size_t width, height;
-    // // this(size_t width=16, size_t height=16)
-    // // {
-    // //     this.width = width;
-    // //     this.height = height;
-
-    // //     assert(map.length == mapHeight);
-    // //     assert(map[0].length == mapWidth);
-    // // }
-
     @property size_t height()
     {
         return map.length;
