@@ -2,16 +2,14 @@ import std.stdio;
 
 import tinyraycaster;
 
-int wall_x_texcoord(const float x, const float y, ref Texture tex_walls)
-{
+int wall_x_texcoord(const float x, const float y, ref Texture tex_walls) {
     import std.math : abs, floor;
     import std.conv : to;
 
     float hitX = x - (x + 0.5).floor;
     float hitY = y - (y + 0.5).floor;
     int textureX = (hitX * tex_walls.size).to!int;
-    if (hitY.abs > hitX.abs)
-    {
+    if (hitY.abs > hitX.abs) {
         textureX = (hitY * tex_walls.size).to!int;
     }
     if (textureX < 0)
@@ -21,8 +19,7 @@ int wall_x_texcoord(const float x, const float y, ref Texture tex_walls)
     return textureX;
 }
 
-void mapShowSprite(ref Sprite sprite, ref FrameBuffer frameBuffer, ref Map map)
-{
+void mapShowSprite(ref Sprite sprite, ref FrameBuffer frameBuffer, ref Map map) {
     import std.conv : to;
 
     const size_t rectangleWidth = frameBuffer.width / (map.width * 2); // Size of a  single map 'cell' on screen
@@ -32,8 +29,7 @@ void mapShowSprite(ref Sprite sprite, ref FrameBuffer frameBuffer, ref Map map)
 }
 
 void drawSprite(ref Sprite sprite, ref float[] depthBuffer,
-        ref FrameBuffer frameBuffer, ref Player player, ref Texture spriteTexture)
-{
+        ref FrameBuffer frameBuffer, ref Player player, ref Texture spriteTexture) {
     import std.math : atan2, sqrt;
     import std.algorithm.comparison : min;
     import std.math.constants : PI;
@@ -48,14 +44,12 @@ void drawSprite(ref Sprite sprite, ref float[] depthBuffer,
             frameBuffer.width / 2) + (frameBuffer.width / 2) / 2 - spriteTexture.size / 2).to!int;
     int offsetV = (frameBuffer.height / 2 - spriteScreenSize / 2).to!int;
 
-    foreach (size_t i; 0 .. spriteScreenSize)
-    {
+    foreach (size_t i; 0 .. spriteScreenSize) {
         if ((offsetH + i) < 0 || (offsetH + i) >= frameBuffer.width / 2)
             continue;
         if (depthBuffer[offsetH + i] < spriteDistance)
             continue;
-        foreach (size_t j; 0 .. spriteScreenSize)
-        {
+        foreach (size_t j; 0 .. spriteScreenSize) {
             if ((offsetV + j) < 0 || (offsetV + j) >= frameBuffer.height)
                 continue;
             uint colour = spriteTexture.get(i * spriteTexture.size / spriteScreenSize,
@@ -69,18 +63,15 @@ void drawSprite(ref Sprite sprite, ref float[] depthBuffer,
 }
 
 void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player,
-        ref Sprite[] sprites, ref Texture wallTexture, ref Texture monsterTexture)
-{
+        ref Sprite[] sprites, ref Texture wallTexture, ref Texture monsterTexture) {
     frameBuffer.clear(white);
 
     const size_t rectangleWidth = frameBuffer.width / (map.width * 2);
     const size_t rectangleHeight = frameBuffer.height / map.height;
 
     // Draw map on left-hand side of the screen
-    foreach (size_t j; 0 .. map.height)
-    {
-        foreach (size_t i; 0 .. map.width)
-        {
+    foreach (size_t j; 0 .. map.height) {
+        foreach (size_t i; 0 .. map.width) {
             if (map.isEmpty(i, j))
                 continue;
 
@@ -105,14 +96,12 @@ void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player,
     import std.conv : to;
 
     // Draw '3D' view, for each pixel across the width of the viewport
-    foreach (size_t i; 0 .. frameBuffer.width / 2)
-    {
+    foreach (size_t i; 0 .. frameBuffer.width / 2) {
         // Get angle for each element in the view vector
         float angle = player.viewDirection - player.fov / 2 + player.fov * (
                 2.0 * i / frameBuffer.width);
         // Scan forward until we hit something, TODO: Optimize this raycasting a bit more
-        for (float t = 0.; t < 20; t += 0.01)
-        {
+        for (float t = 0.; t < 20; t += 0.01) {
             float x = player.x + t * cos(angle);
             float y = player.y + t * sin(angle);
 
@@ -138,11 +127,9 @@ void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player,
             auto pix_x = i + frameBuffer.width / 2;
 
             // Copy texture column to framebuffer
-            for (size_t j = 0; j < columnHeight; j++)
-            {
+            for (size_t j = 0; j < columnHeight; j++) {
                 auto pix_y = j + frameBuffer.height / 2 - columnHeight / 2;
-                if (pix_y >= 0 && pix_y < frameBuffer.height)
-                {
+                if (pix_y >= 0 && pix_y < frameBuffer.height) {
                     frameBuffer.setPixel(pix_x, pix_y, column[j]);
                 }
             }
@@ -153,8 +140,7 @@ void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player,
     // Update sprite distances to player/camera
     import std.math : sqrt;
 
-    foreach (ref sprite; sprites)
-    {
+    foreach (ref sprite; sprites) {
         sprite.playerDistance = sqrt((sprite.x - player.x) ^^ 2 + (sprite.y - player.y) ^^ 2);
     }
 
@@ -164,21 +150,121 @@ void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player,
     sort!("a > b")(sprites);
 
     // Draw sprites
-    foreach (sprite; sprites)
-    {
+    foreach (sprite; sprites) {
         mapShowSprite(sprite, frameBuffer, map);
         drawSprite(sprite, depthBuffer, frameBuffer, player, monsterTexture);
     }
 }
 
-int main()
-{
+import bindbc.sdl;
+
+bool initSDL(ref SDL_Window* window, ref SDL_Renderer* renderer,
+        ref SDL_Surface* surface, int windowWidth = 640, int windowHeight = 480) {
+    // Load the SDL shared library using well-known variations of the library name for the host system.
+    SDLSupport ret = loadSDL();
+    version (Windows)
+        ret = loadSDL("libs/sdl2.dll");
+
+    if (ret != sdlSupport) {
+        if (ret == SDLSupport.noLibrary) {
+            stderr.writeln("The SDL shared library failed to load");
+        } else if (SDLSupport.badLibrary) {
+            stderr.writeln("One or more symbols failed to load. The likely cause is that the shared library is for a lower version than bindbc-sdl was configured to load (via SDL_204, GLFW_2010 etc.)");
+        } else {
+            stderr.writeln("SDL not supported, but I don't know why, sorry x");
+        }
+        return false;
+    }
+
+    // Initialize SDL
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        stderr.writeln("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
+        return false;
+    }
+
+    window = SDL_CreateWindow("tinyraycaster", SDL_WINDOWPOS_UNDEFINED,
+            SDL_WINDOWPOS_UNDEFINED, windowWidth, windowHeight, SDL_WINDOW_SHOWN);
+    if (window == null) {
+        printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
+        return false;
+    }
+
+    //Create renderer for window
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    if (renderer == null) {
+        printf("Renderer could not be created! SDL Error: %s\n", SDL_GetError());
+        return false;
+    }
+    SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
+
+    surface = SDL_GetWindowSurface(window);
+    return true;
+}
+
+bool loadImage(string filename, ref SDL_Surface* surface) {
+    import std.file;
+
+    // Check it could be a valid filename
+    if (!filename.exists) {
+        stderr.writefln("Filename %s does not exist", filename);
+        return false;
+    } else if (!filename.isFile) {
+        stderr.writefln("Filename %s is not a file");
+        return false;
+    }
+
+    // Try and load it and see what happens
+    import std.conv : to;
+    import std.string : toStringz;
+
+    surface = SDL_LoadBMP(filename.to!string.toStringz()); // TODO: Should be a better way of doing this conversion
+    if (surface == null) {
+        stderr.writefln("Unable to read %s: %s", filename, SDL_GetError());
+        return false;
+    }
+
+    return true;
+}
+
+int main() {
+    // Set-up window things
+    const windowWidth = 1024;
+    const windowHeight = 512;
+
+    // The window we'll be rendering to
+    SDL_Window* window;
+    // The surface contained by the window
+    scope (exit) {
+        if (window != null)
+            SDL_DestroyWindow(window);
+        window = null;
+    }
+
+    SDL_Renderer* renderer = null;
+    // Destroy renderer on close
+    scope (exit) {
+        if (renderer != null)
+            SDL_DestroyRenderer(renderer);
+        renderer = null;
+    }
+
+    SDL_Surface* screenSurface;
+    // Destroy surface on close
+    scope (exit) {
+        if (screenSurface != null)
+            SDL_FreeSurface(screenSurface);
+        screenSurface = null;
+    }
+
+    if (!initSDL(window, renderer, screenSurface, windowWidth, windowHeight)) {
+        return -1;
+    }
+
+    // Do rendering
     import std.math : PI;
     import std.conv : to;
 
     // Create frame buffer
-    const windowWidth = 1024;
-    const windowHeight = 512;
     FrameBuffer frameBuffer = FrameBuffer(windowWidth, windowHeight,
             new uint[](windowWidth * windowHeight));
 
@@ -188,8 +274,7 @@ int main()
     // Load texture atlases
     Texture wallTexture = Texture("./source/walltext.png");
     Texture monsterTexture = Texture("./source/monsters.png");
-    if (!monsterTexture.count || !wallTexture.count)
-    {
+    if (!monsterTexture.count || !wallTexture.count) {
         stderr.writeln("Could not load textures");
         return -1;
     }
@@ -206,8 +291,41 @@ int main()
     // Render to frambuffer
     render(frameBuffer, map, player, monsterSprites, wallTexture, monsterTexture);
 
-    // Save frame buffer to image file
-    writeP6Image("out.ppm", frameBuffer.image, windowWidth, windowHeight);
+    SDL_Texture* frameBufferTexture = SDL_CreateTexture(renderer,
+            SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, windowWidth, windowHeight);
+    // import std.range;
+    // 
+    // SDL_UpdateTexture(frameBufferTexture, null,
+    //         255.repeat(frameBuffer.height * frameBuffer.width)
+    //         .array.to!(ubyte[]).ptr, (frameBuffer.width * 4).to!int);
+
+    SDL_UpdateTexture(frameBufferTexture, null, frameBuffer.image.ptr,
+            (frameBuffer.width * 4).to!int);
+
+    // Update window now we've updated the surface
+    SDL_UpdateWindowSurface(window);
+
+    // Hack the screen to stay open
+    SDL_Event e;
+    bool quit = false;
+    while (quit == false) {
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT)
+                quit = true;
+
+            // Clear screen
+            SDL_RenderClear(renderer);
+
+            // Render texture to screen
+            SDL_RenderCopy(renderer, frameBufferTexture, null, null);
+
+            // Update screen
+            SDL_RenderPresent(renderer);
+        }
+    }
+
+    // Quit SDL subsystems
+    SDL_Quit();
 
     return 0;
 }

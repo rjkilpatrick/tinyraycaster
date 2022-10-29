@@ -1,28 +1,23 @@
 module tinyraycaster.map;
 
-struct Map
-{
-    @property size_t height()
-    {
+struct Map {
+    @property size_t height() {
         return map.length;
     }
 
-    @property size_t width()
-    {
+    @property size_t width() {
         return map[0].length;
     }
 
     int get(const size_t i, const size_t j)
     in (i < width)
-    in (j < height)
-    {
+    in (j < height) {
         return map[j][i] - '0';
     }
 
     bool isEmpty(const size_t i, const size_t j)
     in (i < width)
-    in (j < height)
-    {
+    in (j < height) {
         return map[j][i] == ' ';
     }
 }

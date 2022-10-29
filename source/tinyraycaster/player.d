@@ -1,7 +1,6 @@
 module tinyraycaster.player;
 
-struct Player
-{
+struct Player {
     float x, y; // Position
     float viewDirection;
     float fov; // fov
