@@ -104,6 +104,7 @@ void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player,
     import std.math : cos, sin;
     import std.conv : to;
 
+    // Draw '3D' view, for each pixel across the width of the viewport
     foreach (size_t i; 0 .. frameBuffer.width / 2)
     {
         float angle = player.viewDirection - player.fov / 2 + player.fov * (
@@ -146,6 +147,20 @@ void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player,
         }
     }
 
+    // Update sprite distances to player/camera
+    import std.math : sqrt;
+
+    foreach (ref sprite; sprites)
+    {
+        sprite.playerDistance = sqrt((sprite.x - player.x) ^^ 2 + (sprite.y - player.y) ^^ 2);
+    }
+
+    // Sort from furthest to closest
+    import std.algorithm : sort;
+
+    sort!("a > b")(sprites);
+
+    // Draw sprites
     foreach (sprite; sprites)
     {
         mapShowSprite(sprite, frameBuffer, map);
@@ -178,7 +193,11 @@ int main()
 
     // Monster sprites
     Sprite[] monsterSprites = [
-        Sprite(1.834, 8.765, 0), Sprite(5.323, 5.365, 1), Sprite(4.123, 10.265, 1)
+        Sprite(3.523, 3.812, 2, float.infinity),
+        Sprite(3.523, 8.765, 0, float.infinity),
+        Sprite(1.834, 8.765, 0, float.infinity),
+        Sprite(5.323, 5.365, 1, float.infinity),
+        Sprite(4.123, 10.265, 1, float.infinity)
     ];
 
     // Render to frambuffer
