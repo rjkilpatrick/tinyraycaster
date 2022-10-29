@@ -107,20 +107,23 @@ void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player,
     // Draw '3D' view, for each pixel across the width of the viewport
     foreach (size_t i; 0 .. frameBuffer.width / 2)
     {
+        // Get angle for each element in the view vector
         float angle = player.viewDirection - player.fov / 2 + player.fov * (
                 2.0 * i / frameBuffer.width);
+        // Scan forward until we hit something, TODO: Optimize this raycasting a bit more
         for (float t = 0.; t < 20; t += 0.01)
         {
             float x = player.x + t * cos(angle);
             float y = player.y + t * sin(angle);
 
-            // Draw visibility cone
+            // Draw visibility cone on map viewport
             frameBuffer.setPixel((x * rectangleWidth).to!size_t,
                     (y * rectangleHeight).to!size_t, packColour(160, 160, 160));
 
             if (map.isEmpty(x.to!size_t, y.to!size_t))
                 continue;
 
+            // Draw walls on '3D' viewport
             size_t textureId = map.get(x.to!size_t, y.to!size_t); // our ray touches a wall, so draw the vertical column to create an illusion of 3D
             assert(textureId < wallTexture.count);
 
