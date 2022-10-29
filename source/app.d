@@ -21,7 +21,48 @@ int wall_x_texcoord(const float x, const float y, ref Texture tex_walls)
     return textureX;
 }
 
-void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player, ref Texture wallTexture)
+void mapShowSprite(ref Sprite sprite, ref FrameBuffer frameBuffer, ref Map map)
+{
+    import std.conv : to;
+
+    const size_t rectangleWidth = frameBuffer.width / (map.width * 2); // Size of a  single map 'cell' on screen
+    const size_t rectangleHeight = frameBuffer.height / map.height;
+    frameBuffer.drawRectangle((sprite.x * rectangleWidth - 3).to!size_t,
+            (sprite.y * rectangleHeight - 3).to!size_t, 6, 6, packColour(255, 0, 0));
+}
+
+void drawSprite(ref Sprite sprite, ref FrameBuffer frameBuffer, ref Player player,
+        ref Texture spriteTexture)
+{
+    import std.math : atan2, sqrt;
+    import std.algorithm.comparison : min;
+    import std.math.constants : PI;
+    import std.conv : to;
+
+    // Global co-ords direction from the player to the sprite
+    float spriteDirection = atan2(sprite.y - player.y, sprite.x - player.x);
+    float spriteDistance = sqrt((sprite.x - player.x) ^^ 2 + (sprite.y - player.y) ^^ 2);
+
+    size_t spriteScreenSize = min(1_000, (frameBuffer.height / spriteDistance).to!int);
+    int offsetH = (((spriteDirection - player.viewDirection) % (2 * PI)) / player.fov * (
+            frameBuffer.width / 2) + (frameBuffer.width / 2) / 2 - spriteTexture.size / 2).to!int;
+    int offsetV = (frameBuffer.height / 2 - spriteScreenSize / 2).to!int;
+
+    foreach (size_t i; 0 .. spriteScreenSize)
+    {
+        if ((offsetH + i) < 0 || (offsetH + i) >= frameBuffer.width / 2)
+            continue;
+        foreach (size_t j; 0 .. spriteScreenSize)
+        {
+            if ((offsetV + j) < 0 || (offsetV + j) >= frameBuffer.height)
+                continue;
+            frameBuffer.setPixel(frameBuffer.width / 2 + offsetH + i, offsetV + j, black);
+        }
+    }
+}
+
+void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player,
+        ref Sprite[] sprites, ref Texture wallTexture, ref Texture monsterTexture)
 {
     frameBuffer.clear(white);
 
@@ -91,6 +132,12 @@ void render(ref FrameBuffer frameBuffer, ref Map map, ref Player player, ref Tex
             break;
         }
     }
+
+    foreach (sprite; sprites)
+    {
+        mapShowSprite(sprite, frameBuffer, map);
+        drawSprite(sprite, frameBuffer, player, monsterTexture);
+    }
 }
 
 int main()
@@ -106,21 +153,26 @@ int main()
 
     Player player = Player(3.456, 2.345, 1.523, PI / 3);
     Map map;
+
+    // Load texture atlases
     Texture wallTexture = Texture("./source/walltext.png");
-    if (!wallTexture.count)
+    Texture monsterTexture = Texture("./source/monsters.png");
+    if (!monsterTexture.count || !wallTexture.count)
     {
-        stderr.writeln("Could not load textures of walls");
+        stderr.writeln("Could not load textures");
         return -1;
     }
 
-    int frameCount = 50;
-    foreach (size_t frame; 0 .. frameCount)
-    {
-        render(frameBuffer, map, player, wallTexture);
-        // Save frame buffer to image file
-        writeP6Image("out" ~ frame.to!string ~ ".ppm", frameBuffer.image, windowWidth, windowHeight);
-        player.viewDirection += 2.0 * PI / frameCount;
-    }
+    // Monster sprites
+    Sprite[] monsterSprites = [
+        Sprite(1.834, 8.765, 0), Sprite(5.323, 5.365, 1), Sprite(4.123, 10.265, 1)
+    ];
+
+    // Render to frambuffer
+    render(frameBuffer, map, player, monsterSprites, wallTexture, monsterTexture);
+
+    // Save frame buffer to image file
+    writeP6Image("out.ppm", frameBuffer.image, windowWidth, windowHeight);
 
     return 0;
 }
