@@ -37,17 +37,16 @@ void drawSprite(ref Sprite sprite, ref float[] depthBuffer,
 
     // Global co-ords direction from the player to the sprite
     float spriteDirection = atan2(sprite.y - player.y, sprite.x - player.x);
-    float spriteDistance = sqrt((sprite.x - player.x) ^^ 2 + (sprite.y - player.y) ^^ 2);
 
-    size_t spriteScreenSize = min(1_000, (frameBuffer.height / spriteDistance).to!int);
+    size_t spriteScreenSize = min(1_000, (frameBuffer.height / sprite.playerDistance).to!int);
     int offsetH = (((spriteDirection - player.viewDirection) % (2 * PI)) / player.fov * (
             frameBuffer.width / 2) + (frameBuffer.width / 2) / 2 - spriteTexture.size / 2).to!int;
-    int offsetV = (frameBuffer.height / 2 - spriteScreenSize / 2).to!int;
+    int offsetV = (frameBuffer.height.to!float / 2 - spriteScreenSize / 2).to!int;
 
     foreach (size_t i; 0 .. spriteScreenSize) {
         if ((offsetH + i) < 0 || (offsetH + i) >= frameBuffer.width / 2)
             continue;
-        if (depthBuffer[offsetH + i] < spriteDistance)
+        if (depthBuffer[offsetH + i] < sprite.playerDistance)
             continue;
         foreach (size_t j; 0 .. spriteScreenSize) {
             if ((offsetV + j) < 0 || (offsetV + j) >= frameBuffer.height)
@@ -226,7 +225,7 @@ bool loadImage(string filename, ref SDL_Surface* surface) {
     return true;
 }
 
-int main() {
+int run() {
     // Set-up window things
     const windowWidth = 1024;
     const windowHeight = 512;
@@ -268,7 +267,7 @@ int main() {
     FrameBuffer frameBuffer = FrameBuffer(windowWidth, windowHeight,
             new uint[](windowWidth * windowHeight));
 
-    Player player = Player(3.456, 2.345, 1.523, PI / 3);
+    Player player = Player(3.456, 2.345, 1.523, PI / 3, 0, 0);
     Map map;
 
     // Load texture atlases
@@ -288,30 +287,76 @@ int main() {
         Sprite(4.123, 10.265, 1, float.infinity)
     ];
 
-    // Render to frambuffer
-    render(frameBuffer, map, player, monsterSprites, wallTexture, monsterTexture);
-
     SDL_Texture* frameBufferTexture = SDL_CreateTexture(renderer,
             SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, windowWidth, windowHeight);
-    // import std.range;
-    // 
-    // SDL_UpdateTexture(frameBufferTexture, null,
-    //         255.repeat(frameBuffer.height * frameBuffer.width)
-    //         .array.to!(ubyte[]).ptr, (frameBuffer.width * 4).to!int);
-
-    SDL_UpdateTexture(frameBufferTexture, null, frameBuffer.image.ptr,
-            (frameBuffer.width * 4).to!int);
 
     // Update window now we've updated the surface
     SDL_UpdateWindowSurface(window);
 
     // Hack the screen to stay open
-    SDL_Event e;
+    SDL_Event event;
     bool quit = false;
     while (quit == false) {
-        while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT)
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT)
                 quit = true;
+            if (event.type == SDL_KEYDOWN) {
+                switch (event.key.keysym.sym) {
+                case 'a'.to!SDL_Keycode:
+                    player.turn = -1.0;
+                    break;
+                case 'd'.to!SDL_Keycode:
+                    player.turn = 1.0;
+                    break;
+                case 'w'.to!SDL_Keycode:
+                    player.walk = 1.0;
+                    break;
+                case 's'.to!SDL_Keycode:
+                    player.walk = -1.0;
+                    break;
+                default:
+                    break;
+                }
+            }
+            if (event.type == SDL_KEYUP) {
+                switch (event.key.keysym.sym) {
+                case 'a'.to!SDL_Keycode:
+                    player.turn = 0.0;
+                    break;
+                case 'd'.to!SDL_Keycode:
+                    player.turn = 0.0;
+                    break;
+                case 'w'.to!SDL_Keycode:
+                    player.walk = 0.0;
+                    break;
+                case 's'.to!SDL_Keycode:
+                    player.walk = 0.0;
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            // Move player
+            import std.math;
+
+            player.viewDirection += 0.05 * player.turn; // TODO: Change to sensitivity
+            float desiredX = player.x + 0.1 * player.walk * cos(player.viewDirection);
+            float desiredY = player.y + 0.1 * player.walk * sin(player.viewDirection);
+
+            if (desiredX >= 0.0 && desiredX < map.width.to!float
+                    && map.isEmpty(desiredX.to!size_t, desiredY.to!size_t)) {
+                player.x = desiredX;
+            }
+            if (desiredY >= 0.0 && desiredY < map.height.to!float
+                    && map.isEmpty(desiredX.to!size_t, desiredY.to!size_t)) {
+                player.y = desiredY;
+            }
+
+            // Render to frambuffer
+            render(frameBuffer, map, player, monsterSprites, wallTexture, monsterTexture);
+            SDL_UpdateTexture(frameBufferTexture, null, frameBuffer.image.ptr,
+                    (frameBuffer.width * 4).to!int);
 
             // Clear screen
             SDL_RenderClear(renderer);
@@ -323,9 +368,15 @@ int main() {
             SDL_RenderPresent(renderer);
         }
     }
+    return 0;
+}
+
+int main() {
+    // Required to use d's nice scope guards to free before SDL_Quit is run
+    int returnVal = run();
 
     // Quit SDL subsystems
     SDL_Quit();
 
-    return 0;
+    return returnVal;
 }
